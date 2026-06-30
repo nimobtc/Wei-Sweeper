@@ -2,7 +2,7 @@
 He's the creator of the script.
 
 
-Replace xxxxxxxxxxxxxxxxxxxxxxx from ETHERSCAN_API_URL with your/user API ID.
+Replace <strong>xxxxxxxxxxxxxxxxxxxxxxx</strong> from ETHERSCAN_API_URL with your/user API ID.
 
 
 ----------------------------
