@@ -1,18 +1,15 @@
 import os
-import subprocess
-import tarfile
 import random
 import time
 import requests
 from colorama import Fore, Style, init
 from bip_utils import Bip39MnemonicGenerator, Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes
 from eth_utils import to_checksum_address
-from web3 import Web3
 
 init(autoreset=True)
 
 BLOCKCYPHER_API_URL = "https://api.blockcypher.com/v1/eth/main/addrs/{}"
-ETHPLORER_API_URL = "https://api.ethplorer.io/getAddressInfo/{}?apiKey=freekey"
+ETHERSCAN_API_URL = "https://api.etherscan.io/v2/api?module=account&chainid=1&action=balance&address={}&tag=latest&apikey=xxxxxxxxxxxxxxxxxxxxxxx"
 
 def generate_mnemonic(num_words=12):
     if num_words not in [12, 24]:
@@ -26,32 +23,53 @@ def derive_eth_address(mnemonic):
     return to_checksum_address(eth_address), mnemonic.ToStr()
 
 def check_eth_balance(address):
+    # Primer intento: BlockCypher
     try:
         url = BLOCKCYPHER_API_URL.format(address)
         response = requests.get(url, timeout=10)
-        data = response.json()
 
-        if "balance" in data:
-            balance_wei = data["balance"]
-            balance_eth = balance_wei / 1e18
-            if balance_eth == 0:
-                return 0, 0
-            return balance_eth, balance_wei
+        if response.status_code == 200:
+            data = response.json()
+
+            if "balance" in data:
+                balance_wei = int(data["balance"])
+                balance_eth = balance_wei / 1e18
+                return balance_eth, balance_wei
+
     except Exception as e:
         print(f"BlockCypher API failed: {e}")
 
+    # Segundo intento: Etherscan API V2
     try:
-        url = ETHPLORER_API_URL.format(address)
+        url = ETHERSCAN_API_URL.format(address)
         response = requests.get(url, timeout=10)
+
+        if response.status_code != 200:
+            print(f"Etherscan HTTP Error: {response.status_code}")
+            return None, None
+
         data = response.json()
 
-        if "ETH" in data and "balance" in data["ETH"]:
-            balance_wei = int(data["ETH"]["balance"])
+        if data.get("status") == "1":
+            balance_wei = int(data["result"])
             balance_eth = balance_wei / 1e18
             return balance_eth, balance_wei
-        else:
-            print(f"Ethplorer API Error: Balance not found or other error")
+
+        elif data.get("status") == "0":
+            # Etherscan devuelve status=0 para balances en 0 y otros mensajes.
+            if data.get("result", "") in ("0", ""):
+                return 0, 0
+
+            print(f"Etherscan API Error: {data.get('message')} - {data.get('result')}")
             return None, None
+
+        print("Unexpected response from Etherscan.")
+        return None, None
+
+    except Exception as e:
+        print(f"Etherscan API failed: {e}")
+        return None, None
+
     except Exception as e:
         print(f"Ethplorer API failed: {e}")
         return None, None
